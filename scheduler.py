@@ -57,7 +57,7 @@ def printAll():
 
 
 def test():
-    p1 = Process(8)
+    p1 = Process(9)
     p2 = Process(26)
     p3 = Process(10)
     p4 = Process(6)
