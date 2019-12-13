@@ -4,6 +4,8 @@ import math
 
 class queue:
 
+    currentLive = 0
+
     def __init__(self, quantum):
         self.quantum = quantum
         self.queue = deque()
@@ -35,7 +37,7 @@ class Process:
         self.waiting = self.finish - self.arrival - self.burst
 
     def assign(self):
-        queues[self.level].append(self)
+        queues[self.level].queue.append(self)
 
     def demote(self):
         if not self.isFinished:
@@ -49,6 +51,7 @@ level1 = queue(16)
 FCFS = queue(math.inf)
 processes = []
 queues = [level0, level1, FCFS]
+isInterrupted = False
 
 
 def start():
@@ -65,45 +68,80 @@ def getNextArrival(offset):
 
 
 def execute(level):
-    isInterrupted = False
+    update()
     for p in processes:
         if p.level == level and not p.isFinished:
-            queues[level].append(p)
-    for p in queues[level]:
-        if p.remB > queues[level].quantum - p.q and Process.nextArrival.arrival > Process.t + queues[level].quantum - p.q:
-            Process.t += queues[level].quantum - p.q
-            p.remB = max(0, p.remB - queues[level].quantum - p.q)
-            p.demote()
-        elif p.remB <= queues[level].quantum - p.q and Process.nextArrival.arrival > Process.t + queues[level].quantum - p.q:
-            Process.t += p.remB
-            p.remB = 0
-            p.isFinished = True
-            p.q = 0
-        elif not level == 0:
-            delta = Process.nextArrival.arrival - Process.t
-            p.remB -= delta
-            Process.t += delta
-            p.q = delta
-            isInterrupted = True
-            break
-        else:
-            Process.t += queues[level].quantum - p.q
-            p.remB = max(0, p.remB - queues[level].quantum - p.q)
-            p.demote()
-            isInterrupted = True
-            break
-    if isInterrupted:
-        Process.nextArrival.assign()
-        interrupt()
+            queues[level].queue.append(p)
+    if len(queues[level].queue) > 0:
+        for p in queues[level].queue:
+            if p.remB > queues[level].quantum - p.q and Process.nextArrival.arrival > Process.t + queues[level].quantum - p.q:
+                Process.t += queues[level].quantum - p.q
+                p.remB = max(0, p.remB - queues[level].quantum - p.q)
+                p.demote()
+            elif p.remB <= queues[level].quantum - p.q and Process.nextArrival.arrival > Process.t + queues[level].quantum - p.q:
+                Process.t += p.remB
+                p.remB = 0
+                p.isFinished = True
+                p.q = 0
+            elif not level == 0:
+                delta = Process.nextArrival.arrival - Process.t
+                p.remB -= delta
+                Process.t += delta
+                p.q = delta
+                isInterrupted = True
+                break
+            else:
+                Process.t += queues[level].quantum - p.q
+                p.remB = max(0, p.remB - queues[level].quantum - p.q)
+                p.demote()
+                isInterrupted = True
+                break
+        if isInterrupted:
+            Process.nextArrival.assign()
+            interrupt()
+    if level + 1 < len(queues):
+        execute(level + 1)
 
 
 def interrupt():
-    execute(0)
+    level = 0
+    while level < queue.currentLive:
+        for p in queues[level].queue:
+            if p.remB > queues[level].quantum - p.q and Process.nextArrival.arrival > Process.t + queues[level].quantum - p.q:
+                Process.t += queues[level].quantum - p.q
+                p.remB = max(0, p.remB - queues[level].quantum - p.q)
+                p.demote()
+            elif p.remB <= queues[level].quantum - p.q and Process.nextArrival.arrival > Process.t + queues[
+                level].quantum - p.q:
+                Process.t += p.remB
+                p.remB = 0
+                p.isFinished = True
+                p.q = 0
+            elif not level == 0:
+                delta = Process.nextArrival.arrival - Process.t
+                p.remB -= delta
+                Process.t += delta
+                p.q = delta
+                break
+            else:
+                Process.t += queues[level].quantum - p.q
+                p.remB = max(0, p.remB - queues[level].quantum - p.q)
+                p.demote()
+                break
+        level += 1
+
+def update():
+    getNextArrival(0)
+    for p in processes:
+        if not (queues[p.level].queue.__contains__(p) or p.isFinished):
+            queues[p.level].queue.append(p)
 
 
 def printAll():
+    print("\n"+"Process no" + " (Arrival time) " + '\t\t' + "Burst " + " Wait " + "Turnaround")
     for p in processes:
-        print(str(p.id) + "\t" + str(p.arrival))
+        p.wait()
+        p.print()
 
 
 def test():
@@ -111,6 +149,8 @@ def test():
     Process(0, 26)
     Process(3, 10)
     Process(9, 6)
+
+    start()
 
     printAll()
 
