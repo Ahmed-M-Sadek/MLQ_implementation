@@ -4,13 +4,13 @@ import math
 class Queue:
 
     current = 0
+    isInterrupted = False
 
     def __init__(self, quantum):
         self.quantum = quantum
         self.queue = []
         self.isRunning = False
         self.isFinished = False
-        self.isInterrupted = False
 
 
 class Process:
@@ -84,7 +84,8 @@ def execute(level):
     if level > Queue.current:
         return
     update()
-    for index, p in enumerate(queues[level].queue):
+    tempQueue = queues[level].queue.copy()
+    for p in tempQueue:
         if Process.nextArrival is not None:
             if processes[Process.nextArrival].arrival > Process.t + queues[level].quantum - p.q:
                 if p.remB >= queues[level].quantum - p.q:
@@ -96,7 +97,7 @@ def execute(level):
                     Process.t += p.remB
                     p.remB = 0
                     p.q = 0
-                    queues[level].queue.pop(index)
+                    queues[level].queue.remove(p)
                     if p.checkFinished():
                         p.finish = Process.t
                     else:
@@ -110,6 +111,7 @@ def execute(level):
                     if p.checkFinished():
                         p.finish = Process.t
                     Process.t += delta
+                    Queue.isInterrupted = True
                     interrupt(processes[Process.nextArrival], level, p)
 
                 else:
@@ -125,12 +127,12 @@ def execute(level):
                 p.remB -= queues[level].quantum - p.q
                 p.demote()
                 p.q = 0
-                queues[level].queue.pop(index)
+                queues[level].queue.remove(p)
             else:
                 Process.t += p.remB
                 p.remB = 0
                 p.q = 0
-                queues[level].queue.pop(index)
+                queues[level].queue.remove(p)
                 if p.checkFinished():
                     p.finish = Process.t
                 else:
@@ -140,15 +142,15 @@ def execute(level):
     for p in queues[level].queue:
         if p.checkFinished or not p.level == level:
             queues[level].queue.remove(p)
-    if not len(queues[level].queue) == 0 and queues[level].isInterrupted:
-        queues[level].isInterrupted = True
-        execute(0)
+    if not len(queues[level].queue) == 0:
+        Queue.isInterrupted = True
+        execute(level)
     if level == Queue.current:
         queues[level].isFinished = True
 
 
 def interrupt(p,  level, po):
-    queues[level].isInterrupted = True
+    Queue.isInterrupted = True
     if level == 0:
         queues[0].queue.append(p)
         getNextArrival()
