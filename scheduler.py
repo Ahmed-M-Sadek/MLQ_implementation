@@ -34,20 +34,25 @@ class Process:
         processes.append(self)
 
     def print(self):
-        print("process " + str(self.id) + " \t(" + str(self.arrival) + ") " + '\t\t\t\t' + str(self.burst) + '\t\t' + str(self.waiting) + '\t\t' + str(self.finish - self.arrival) +'\t\t\t' + str(self.finish))
+        print("process " + str(self.id) + " \t(" + str(self.arrival) + ") " + '\t\t\t\t' + str(self.burst) + '\t\t' + str(self.waiting) + '\t\t' + str(self.finish - self.arrival) +'\t\t\t' + str(self.finish)+str(self.isFinished))
 
     def wait(self):
         self.waiting = self.finish - self.arrival - self.burst
 
     def assign(self):
+        for q in queues:
+            if q.queue.__contains__(self) and not queues.index(q) == self.level:
+                q.queue.remove(self)
         if not queues[self.level].queue.__contains__(self):
             queues[self.level].queue.append(self)
+        if self.checkFinished():
+            queues[self.level].queue.remove(self)
 
     def demote(self):
         if not self.checkFinished():
             if self.level + 1 < len(queues):
                 self.level += 1
-                self.assign()
+        self.assign()
 
     def checkFinished(self):
         if self.remB <= 0:
@@ -64,10 +69,14 @@ queues = [level0, level1, FCFS]
 
 def start():
     processes.sort(key=lambda x: x.arrival)
+    Process.t = processes[0].arrival
+    nonpreemtiveexecute()
+    Queue.current += 1
     while Queue.current < len(queues):
         if not queues[Queue.current].isFinished:
             queues[Queue.current].isRunning = True
-            execute(Queue.current)
+            preemptiveexecute(Queue.current)
+            queues[Queue.current].isRunning = False
         elif queues[Queue.current].isFinished:
             Queue.current += 1
 
@@ -80,128 +89,63 @@ def getNextArrival():
     Process.nextArrival = None
 
 
-def execute(level):
-    if level > Queue.current:
-        return
+def nonpreemtiveexecute():
+    update()
+    tempQueue = queues[0].queue.copy()
+    for p in tempQueue:
+        if p.remB < queues[0].quantum - p.q:
+            executeProcess(p, p.remB, True)
+        else:
+            executeProcess(p, queues[0].quantum - p.q, True)
+    if Process.nextArrival is not None and processes[Process.nextArrival].arrival <= Process.t:
+        nonpreemtiveexecute()
+
+
+def preemptiveexecute(level):
     update()
     tempQueue = queues[level].queue.copy()
     for p in tempQueue:
-        if Process.nextArrival is not None:
-            if processes[Process.nextArrival].arrival > Process.t + queues[level].quantum - p.q:
-                if p.remB >= queues[level].quantum - p.q:
-                    Process.t += queues[level].quantum - p.q
-                    p.remB -= queues[level].quantum - p.q
-                    p.demote()
-                    p.q = 0
-                else:
-                    Process.t += p.remB
-                    p.remB = 0
-                    p.q = 0
-                    queues[level].queue.remove(p)
-                    if p.checkFinished():
-                        p.finish = Process.t
-                    else:
-                        p.demote()
-
-            else:
-                if level > 0:
-                    delta = processes[Process.nextArrival].arrival - Process.t
-                    p.q += delta
-                    p.remB -= delta
-                    if p.checkFinished():
-                        p.finish = Process.t
-                    Process.t += delta
-                    Queue.isInterrupted = True
-                    interrupt(processes[Process.nextArrival], level, p)
-
-                else:
-                    Process.t += queues[level].quantum - p.q
-                    p.remB -= queues[level].quantum - p.q
-                    p.demote()
-                    p.q = 0
-                    queues[0].queue.append(processes[Process.nextArrival])
-                    getNextArrival()
+        if Process.nextArrival is None or processes[Process.nextArrival].arrival >= Process.t + queues[level].quantum - p.q:
+            executeProcess(p, queues[level].quantum - p.q, True)
         else:
-            if p.remB >= queues[level].quantum - p.q:
-                Process.t += queues[level].quantum - p.q
-                p.remB -= queues[level].quantum - p.q
-                p.demote()
-                p.q = 0
-                queues[level].queue.remove(p)
-            else:
-                Process.t += p.remB
-                p.remB = 0
-                p.q = 0
-                queues[level].queue.remove(p)
-                if p.checkFinished():
-                    p.finish = Process.t
-                else:
-                    p.demote()
-
+            while Process.nextArrival is not None and processes[Process.nextArrival].arrival < Process.t + queues[level].quantum - p.q:
+                delta = processes[Process.nextArrival].arrival - Process.t
+                executeProcess(p, delta, False)
+                p.q += delta
+                interrupt(processes[Process.nextArrival])
+            executeProcess(p, queues[level].quantum - p.q, True)
     queues[level].isRunning = False
     for p in queues[level].queue:
         if p.checkFinished or not p.level == level:
-            queues[level].queue.remove(p)
+            p.assign()
     if not len(queues[level].queue) == 0:
         Queue.isInterrupted = True
-        execute(level)
+        preemptiveexecute(level)
     if level == Queue.current:
         queues[level].isFinished = True
 
 
-def interrupt(p,  level, po):
+def executeProcess(p, t, demoted):
+    if t <= p.remB:
+        Process.t += t
+        p.remB -= t
+    else:
+        Process.t += p.remB
+        p.remB = 0
+    if p.checkFinished():
+        p.finish = Process.t
+    if demoted:
+        p.q = 0
+        p.demote()
+
+
+def interrupt(p):
+    getNextArrival()
     Queue.isInterrupted = True
-    if level == 0:
-        queues[0].queue.append(p)
-        getNextArrival()
-        return
-    else:
-        p.assign()
-        execute(0)
-        if Queue.current > 1:
-            execute(1)
-    continueProcess(po, queues[level])
-
-
-def continueProcess(p, q):
-    if Process.nextArrival is not None:
-        if processes[Process.nextArrival].arrival >= Process.t + q.quantum - p.q:
-            if p.remB >= q.quantum - p.q:
-                Process.t += q.quantum - p.q
-                p.remB -= q.quantum - p.q
-                p.demote()
-                p.q = 0
-            else:
-                Process.t += p.remB
-                p.remB = 0
-                p.q = 0
-                if p.checkFinished():
-                    p.finish = Process.t
-                else:
-                    p.demote()
-        else:
-            delta = processes[Process.nextArrival].arrival - Process.t
-            p.q += delta
-            p.remB -= delta
-            if p.checkFinished():
-                p.finish = Process.t
-            Process.t += delta
-            Queue.isInterrupted = True
-            interrupt(processes[Process.nextArrival], p.level, p)
-    else:
-        if p.remB >= q.quantum - p.q:
-            Process.t += q.quantum - p.q
-            p.remB -= q.quantum - p.q
-            p.demote()
-            p.q = 0
-        else:
-            Process.t += p.remB
-            p.remB = 0
-            p.q = 0
-            if p.checkFinished():
-                p.finish = Process.t
-            else:
-                p.demote()
+    p.assign()
+    nonpreemtiveexecute()
+    while p.level < Queue.current:
+        preemptiveexecute(p.level)
 
 
 def update():
@@ -224,8 +168,8 @@ def test():
     Process(0, 30)
     Process(16, 5)
     Process(6, 10)
-    Process(39, 25)
-    Process(80, 3)
+    Process(9, 25)
+    Process(30, 4)
 
     start()
     printAll()
