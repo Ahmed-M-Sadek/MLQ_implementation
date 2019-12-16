@@ -34,7 +34,7 @@ class Process:
         processes.append(self)
 
     def print(self):
-        print("process " + str(self.id) + " \t(" + str(self.arrival) + ") " + '\t\t\t\t' + str(self.burst) + '\t\t' + str(self.waiting) + '\t\t' + str(self.finish - self.arrival) +'\t' + str(self.finish))
+        print("process " + str(self.id) + " \t(" + str(self.arrival) + ") " + '\t\t\t\t' + str(self.burst) + '\t\t' + str(self.waiting) + '\t\t' + str(self.finish - self.arrival) +'\t\t\t' + str(self.finish))
 
     def wait(self):
         self.waiting = self.finish - self.arrival - self.burst
@@ -180,12 +180,14 @@ def continueProcess(p, q):
                 else:
                     p.demote()
         else:
-            Process.t += q.quantum - p.q
-            p.remB -= q.quantum - p.q
-            p.demote()
-            p.q = 0
-            queues[0].queue.append(processes[Process.nextArrival])
-            getNextArrival()
+            delta = processes[Process.nextArrival].arrival - Process.t
+            p.q += delta
+            p.remB -= delta
+            if p.checkFinished():
+                p.finish = Process.t
+            Process.t += delta
+            Queue.isInterrupted = True
+            interrupt(processes[Process.nextArrival], p.level, p)
     else:
         if p.remB >= q.quantum - p.q:
             Process.t += q.quantum - p.q
@@ -218,10 +220,13 @@ def printAll():
 
 
 def test():
-    Process(25, 9)
-    Process(0, 26)
-    Process(3, 10)
-    Process(9, 6)
+    Process(30, 12)
+    Process(0, 30)
+    Process(16, 5)
+    Process(6, 10)
+    Process(39, 25)
+    Process(80, 3)
+
     start()
     printAll()
 
